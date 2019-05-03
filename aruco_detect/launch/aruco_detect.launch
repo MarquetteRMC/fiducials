@@ -23,4 +23,7 @@
         to="$(arg camera)/$(arg image)/$(arg transport)"/>
     <remap from="/camera_info" to="$(arg camera)/camera_info"/>
   </node>
+  <node name="$(anon dynparam)" pkg="dynamic_reconfigure" type="dynparam" args="set_from_parameters /camera/driver">
+    <param name="data_skip" type="int" value="6" />
+  </node>
 </launch>
