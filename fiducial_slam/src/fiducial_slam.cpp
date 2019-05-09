@@ -118,6 +118,7 @@ void FiducialSlam::transformCallback(const fiducial_msgs::FiducialTransformArray
                                                             ft.transform,
                                                             variance),
                         msg->header.stamp, msg->header.frame_id));
+	
         observations.push_back(obs);
     }
 
@@ -170,7 +171,7 @@ FiducialSlam::FiducialSlam(ros::NodeHandle &nh) : estimator(fiducialMap),
         verticesSub = nh.subscribe("/fiducial_vertices", 1,
                              &FiducialSlam::verticesCallback, this); 
 
-        cameraInfoSub = nh.subscribe("/camera_info", 1,
+        cameraInfoSub = nh.subscribe("/camera/rgb/camera_info", 1,
                               &FiducialSlam::camInfoCallback, this);
 
         ftPub = ros::Publisher(nh.advertise

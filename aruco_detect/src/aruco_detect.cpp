@@ -46,6 +46,7 @@
 #include <sensor_msgs/image_encodings.h>
 #include <dynamic_reconfigure/server.h>
 #include <std_srvs/SetBool.h>
+#include <std_msgs/Float64.h>
 
 #include "fiducial_msgs/Fiducial.h"
 #include "fiducial_msgs/FiducialArray.h"
@@ -68,6 +69,7 @@ class FiducialsNode {
   private:
     ros::Publisher * vertices_pub;
     ros::Publisher * pose_pub;
+    ros::Publisher * angle_pub;
 
     ros::Subscriber caminfo_sub;
     image_transport::ImageTransport it;
@@ -276,10 +278,11 @@ void FiducialsNode::configCallback(aruco_detect::DetectorParamsConfig & config, 
 void FiducialsNode::camInfoCallback(const sensor_msgs::CameraInfo::ConstPtr& msg)
 {
     if (haveCamInfo) {
-        return;
+	return;
     }
 
     if (msg->K != boost::array<double, 9>({0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0})) {
+	ROS_INFO("trying to set parameters");
         for (int i=0; i<3; i++) {
             for (int j=0; j<3; j++) {
                 cameraMatrix.at<double>(i, j) = msg->K[i*3+j];
@@ -310,6 +313,7 @@ void FiducialsNode::imageCallback(const sensor_msgs::ImageConstPtr & msg) {
 	cv_bridge::CvImagePtr cv_ptr;
 
 	fiducial_msgs::FiducialTransformArray fta;
+	std_msgs::Float64 angle_value;
 	fta.header.stamp = msg->header.stamp;
 	fta.header.frame_id = frameId;
 	fta.image_seq = msg->header.seq;
@@ -356,12 +360,12 @@ void FiducialsNode::imageCallback(const sensor_msgs::ImageConstPtr & msg) {
             }
 
             if (doPoseEstimation) {
-              /*if (!haveCamInfo) {
+              if (!haveCamInfo) {
                      if (frameNum > 5) {
                          ROS_ERROR("No camera intrinsics");
                      }
                      return;
-                }*/
+                }
 
                 vector <double>reprojectionError;
                 estimatePoseSingleMarkers(ids, corners, (float)fiducial_len,
@@ -386,7 +390,8 @@ void FiducialsNode::imageCallback(const sensor_msgs::ImageConstPtr & msg) {
                     Vec3d axis = rvecs[i] / angle;
                     ROS_INFO("angle %f axis %f %f %f",
 	                         angle, axis[0], axis[1], axis[2]);
-
+	    	    
+		    angle_value.data = angle;
                     fiducial_msgs::FiducialTransform ft;
                     ft.fiducial_id = ids[i];
                     ft.transform.translation.x = tvecs[i][0];
@@ -411,6 +416,7 @@ void FiducialsNode::imageCallback(const sensor_msgs::ImageConstPtr & msg) {
 
                     fta.transforms.push_back(ft);
             	}
+                angle_pub->publish(angle_value);
                 pose_pub->publish(fta);
             }
             if (publish_images) {
@@ -435,7 +441,8 @@ bool FiducialsNode::enableDetectionsCallback(std_srvs::SetBool::Request &req,
     }
     else {
         res.message = "Disabled aruco detections.";
-        ROS_INFO("Disabled aruco detections.");
+        
+ROS_INFO("Disabled aruco detections.");
     }
     
     res.success = true;
@@ -540,14 +547,17 @@ FiducialsNode::FiducialsNode(ros::NodeHandle & nh) : it(nh)
 
     vertices_pub = new ros::Publisher(nh.advertise<fiducial_msgs::FiducialArray>("/fiducial_vertices", 1));
 
+
     pose_pub = new ros::Publisher(nh.advertise<fiducial_msgs::FiducialTransformArray>("/fiducial_transforms", 1));
+
+    angle_pub = new ros::Publisher(nh.advertise<std_msgs::Float64>("/fiducial_angle",1));
 
     dictionary = aruco::getPredefinedDictionary(dicno);
 
     img_sub = it.subscribe("/camera/rgb/image_raw", 1,
                         &FiducialsNode::imageCallback, this); //Changed from camera topic. May need something else too.
 
-    caminfo_sub = nh.subscribe("/camera_info", 1,
+    caminfo_sub = nh.subscribe("/camera/rgb/camera_info", 1,
                     &FiducialsNode::camInfoCallback, this);
 
     service_enable_detections = nh.advertiseService("enable_detections",
